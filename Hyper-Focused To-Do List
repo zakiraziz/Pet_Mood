@@ -1,0 +1,64 @@
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#define MAX_TASKS 100
+#define MAX_LEN 200
+
+typedef struct {
+    char description[MAX_LEN];
+    int priority; // 1 = highest, 5 = lowest
+} Task;
+
+Task tasks[MAX_TASKS];
+int task_count = 0;
+
+void add_task() {
+    if (task_count >= MAX_TASKS) {
+        printf("Task list full!\n");
+        return;
+    }
+    printf("Enter task: ");
+    getchar();
+    fgets(tasks[task_count].description, MAX_LEN, stdin);
+    tasks[task_count].description[strcspn(tasks[task_count].description, "\n")] = 0;
+    
+    printf("Enter priority (1=highest, 5=lowest): ");
+    scanf("%d", &tasks[task_count].priority);
+    task_count++;
+    printf("Task added!\n");
+}
+
+void show_most_urgent() {
+    if (task_count == 0) {
+        printf("No tasks! Enjoy your break.\n");
+        return;
+    }
+    int highest_priority = 999;
+    int index = -1;
+    for (int i = 0; i < task_count; i++) {
+        if (tasks[i].priority < highest_priority) {
+            highest_priority = tasks[i].priority;
+            index = i;
+        }
+    }
+    printf("\n=== YOUR #1 TASK ===\n");
+    printf("Task: %s\n", tasks[index].description);
+    printf("Priority: %d\n", tasks[index].priority);
+    printf("=====================\n");
+}
+
+int main() {
+    int choice;
+    do {
+        printf("\n1. Add Task\n2. Show Most Urgent Task\n3. Exit\nChoice: ");
+        scanf("%d", &choice);
+        switch(choice) {
+            case 1: add_task(); break;
+            case 2: show_most_urgent(); break;
+            case 3: printf("Stay productive!\n"); break;
+            default: printf("Invalid choice\n");
+        }
+    } while(choice != 3);
+    return 0;
+}
