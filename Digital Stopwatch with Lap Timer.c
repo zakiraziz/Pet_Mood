@@ -323,5 +323,318 @@ int kbhit() {
         ungetc(ch, stdin);
         return 1;
     }
+    #endif
+}
+
+char getch() {
+#ifdef _WIN32
+    return _getch();
+#else
+    struct termios oldt, newt;
+    char ch;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    ch = getchar();
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    return ch;
+#endif
+}
+
+int get_terminal_width() {
+#ifdef _WIN32
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+    return csbi.srWindow.Right - csbi.srWindow.Left + 1;
+#else
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    return w.ws_col;
+#endif
+}
+
+void animate_transition() {
+    char spinner[] = "|/-\\";
+    for (int i = 0; i < 10; i++) {
+        printf("\rLoading... %c", spinner[i % 4]);
+        fflush(stdout);
+        sleep_ms(50);
+    }
+    printf("\r          \r");
+}
+
+int main() {
+    signal(SIGINT, handle_signal);
     
+    system(CLEAR);
+    set_color(COLOR_CYAN);
+    printf("╔═══════════════════════════════════════════════════════════╗\n");
+    printf("║              ADVANCED COMMAND LINE STOPWATCH             ║\n");
+    printf("╚═══════════════════════════════════════════════════════════╝\n");
+    set_color(COLOR_WHITE);
+    printf("Press any key to start...\n");
+    show_menu();
+    getch();
+    
+    start_time = time(NULL);
+    lap_start = start_time;
+    time_t last_display = start_time;
+    time_t current;
+    int show_milliseconds = 0;
+    
+    while (running) {
+        current = time(NULL);
+        time_t elapsed = current - start_time - total_pause_time;
+        
+        // Update display every second
+        if (current != last_display && !paused) {
+            if (countdown_mode && countdown_running) {
+                time_t remaining = target_time - elapsed;
+                if (remaining <= 0) {
+                    printf("\r!!! TIME'S UP !!!   ");
+                    set_color(COLOR_RED);
+                    for (int i = 0; i < 5; i++) {
+                        printf("\a"); // Beep
+                        sleep_ms(200);
+                        printf("\r!!! TIME'S UP !!!   ");
+                        sleep_ms(200);
+                    }
+                    set_color(COLOR_WHITE);
+                    countdown_running = 0;
+                    printf("\n");
+                } else {
+                    display_time_enhanced(remaining, 0);
+                }
+            } else {
+                display_time_enhanced(elapsed, show_milliseconds);
+            }
+            last_display = current;
+        } else if (paused) {
+            set_color(COLOR_YELLOW);
+            printf("\r[PAUSED] ");
+            display_time_enhanced(elapsed, show_milliseconds);
+            set_color(COLOR_WHITE);
+        }
+        
+        // Check for key press (non-blocking)
+        if (kbhit()) {
+            char c = getch();
+            c = tolower(c);
+            
+            switch(c) {
+                case '\n':
+                case '\r':
+                    if (!paused && !countdown_running) {
+                        time_t lap_time = current - lap_start;
+                        if (lap_count < MAX_LAPS) {
+                            lap_times[lap_count] = lap_time;
+                            strcpy(lap_notes[lap_count], "");
+                            lap_count++;
+                            set_color(COLOR_GREEN);
+                            printf("\n✓ Lap %d time: ", lap_count);
+                            display_time_enhanced(lap_time, 1);
+                            set_color(COLOR_WHITE);
+                            
+                            // Show split times
+                            if (split_count > 0) {
+                                printf(" (");
+                                for (int i = 0; i < split_count; i++) {
+                                    printf("%s: ", split_labels[i]);
+                                    display_time_enhanced(split_times[i], 1);
+                                    if (i < split_count - 1) printf(", ");
+                                }
+                                printf(")");
+                            }
+                            printf("\n");
+                        } else {
+                            set_color(COLOR_RED);
+                            printf("\nMaximum laps reached (%d)!\n", MAX_LAPS);
+                            set_color(COLOR_WHITE);
+                        }
+                        lap_start = current;
+                        
+                        // Reset splits for new lap
+                        split_count = 0;
+                    }
+                    break;
+                    
+                case ' ':
+                    if (paused) {
+                        // Resume
+                        total_pause_time += current - pause_start;
+                        paused = 0;
+                        lap_start = current - (lap_start - pause_start);
+                        set_color(COLOR_GREEN);
+                        printf("\n▶ Resumed!\n");
+                        set_color(COLOR_WHITE);
+                    } else {
+                        // Pause
+                        paused = 1;
+                        pause_start = current;
+                        set_color(COLOR_YELLOW);
+                        printf("\n⏸ Paused!\n");
+                        set_color(COLOR_WHITE);
+                    }
+                    break;
+                    
+                case 'l':
+                    display_lap_times();
+                    break;
+                    
+                case 's':
+                    display_stats(current);
+                    break;
+                    
+                case 'p':
+                    if (!paused && lap_count > 0) {
+                        time_t split_time = current - lap_start;
+                        if (split_count < MAX_SPLITS) {
+                            split_times[split_count] = split_time;
+                            printf("\nEnter split label (max 29 chars): ");
+                            fflush(stdout);
+                            char label[30];
+                            if (fgets(label, sizeof(label), stdin)) {
+                                label[strcspn(label, "\n")] = 0;
+                                if (strlen(label) > 0) {
+                                    strcpy(split_labels[split_count], label);
+                                } else {
+                                    sprintf(split_labels[split_count], "Split %d", split_count+1);
+                                }
+                            }
+                            split_count++;
+                            set_color(COLOR_CYAN);
+                            printf("✓ Split recorded: %s at ", split_labels[split_count-1]);
+                            display_time_enhanced(split_time, 1);
+                            printf("\n");
+                            set_color(COLOR_WHITE);
+                        } else {
+                            set_color(COLOR_RED);
+                            printf("\nMaximum splits reached (%d)!\n", MAX_SPLITS);
+                            set_color(COLOR_WHITE);
+                        }
+                    }
+                    break;
+                    
+                case 'n':
+                    if (lap_count > 0) {
+                        printf("\nEnter note for lap %d: ", lap_count);
+                        fflush(stdout);
+                        char note[50];
+                        if (fgets(note, sizeof(note), stdin)) {
+                            note[strcspn(note, "\n")] = 0;
+                            strcpy(lap_notes[lap_count-1], note);
+                            set_color(COLOR_GREEN);
+                            printf("✓ Note added: %s\n", note);
+                            set_color(COLOR_WHITE);
+                        }
+                    }
+                    break;
+                    
+                case 't':
+                    printf("\nEnter target time in seconds (for countdown): ");
+                    int target_secs;
+                    if (scanf("%d", &target_secs) == 1 && target_secs > 0) {
+                        target_time = target_secs;
+                        countdown_mode = 1;
+                        countdown_running = 1;
+                        start_time = current;
+                        lap_start = current;
+                        total_pause_time = 0;
+                        set_color(COLOR_YELLOW);
+                        printf("✓ Countdown mode set for ");
+                        display_time_enhanced(target_time, 0);
+                        printf("\n");
+                        set_color(COLOR_WHITE);
+                    }
+                    getchar(); // Clear newline
+                    break;
+                    
+                case 'h':
+                    load_history();
+                    break;
+                    
+                case 'e':
+                    save_history(elapsed, current);
+                    break;
+                    
+                case 'r':
+                    printf("\nReset stopwatch? (y/n): ");
+                    char confirm = getch();
+                    if (confirm == 'y' || confirm == 'Y') {
+                        animate_transition();
+                        start_time = current;
+                        lap_start = current;
+                        lap_count = 0;
+                        total_pause_time = 0;
+                        paused = 0;
+                        split_count = 0;
+                        countdown_mode = 0;
+                        countdown_running = 0;
+                        set_color(COLOR_GREEN);
+                        printf("\n✓ Stopwatch reset!\n");
+                        set_color(COLOR_WHITE);
+                    }
+                    break;
+                    
+                case 'm':
+                    show_milliseconds = !show_milliseconds;
+                    set_color(COLOR_CYAN);
+                    printf("\n✓ Milliseconds display %s\n", 
+                           show_milliseconds ? "ON" : "OFF");
+                    set_color(COLOR_WHITE);
+                    break;
+                    
+                case 'q':
+                case 'c':
+                    running = 0;
+                    printf("\nExiting stopwatch...\n");
+                    break;
+                    
+                default:
+                    break;
+            }
+        }
+        
+        sleep_ms(50); // Small delay to reduce CPU usage
+    }
+    
+    time_t end_time = time(NULL);
+    time_t final_time = end_time - start_time - total_pause_time;
+    
+    system(CLEAR);
+    set_color(COLOR_CYAN);
+    printf("\n╔════════════════════════════════════════════╗\n");
+    printf("║             FINAL RESULTS                   ║\n");
+    printf("╠════════════════════════════════════════════╣\n");
+    set_color(COLOR_WHITE);
+    printf("║ Final Time: ");
+    display_time_enhanced(final_time, 1);
+    printf("                ║\n");
+    
+    if (lap_count > 0) {
+        printf("║ Total Laps: %d                              ║\n", lap_count);
+    }
+    
+    set_color(COLOR_CYAN);
+    printf("╚════════════════════════════════════════════╝\n");
+    set_color(COLOR_WHITE);
+    
+    if (lap_count > 0) {
+        display_lap_times();
+        display_stats(end_time);
+    }
+    
+    // Ask to save
+    printf("\nSave session to history? (y/n): ");
+    char save = getch();
+    if (save == 'y' || save == 'Y') {
+        save_history(final_time, end_time);
+    }
+    
+    printf("\nThank you for using Advanced Stopwatch!\n");
+    printf("Session ended at: %s", ctime(&end_time));
+    
+    return 0;
+}
     return 0;
