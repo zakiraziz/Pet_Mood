@@ -104,4 +104,114 @@ void view_logs() {
     fclose(f);
     printf("Total: %d logs\n", count);
 }
+void search_logs() {
+    char search_term[MAX_MESSAGE];
+    printf("Enter search term: ");
+    fgets(search_term, MAX_MESSAGE, stdin);
+    search_term[strcspn(search_term, "\n")] = 0;
+    
+    FILE *f = fopen(LOG_FILE, "r");
+    if (!f) {
+        printf("No logs yet.\n");
+        return;
+    }
+    
+    char line[MAX_MESSAGE];
+    int found = 0;
+    printf("\n=== SEARCH RESULTS ===\n");
+    while (fgets(line, MAX_MESSAGE, f)) {
+        if (strstr(line, search_term)) {
+            printf("%s", line);
+            found++;
+        }
+    }
+    fclose(f);
+    
+    if (!found) {
+        printf("No logs found containing '%s'\n", search_term);
+    } else {
+        printf("Found %d log entries\n", found);
+    }
+}
+
+void clear_logs() {
+    char confirm;
+    printf("Are you sure you want to clear all logs? (y/n): ");
+    scanf(" %c", &confirm);
+    getchar();
+    
+    if (confirm == 'y' || confirm == 'Y') {
+        FILE *f = fopen(LOG_FILE, "w");
+        if (f) {
+            fclose(f);
+            printf("Logs cleared successfully.\n");
+        } else {
+            printf("Error clearing logs.\n");
+        }
+    } else {
+        printf("Clear operation cancelled.\n");
+    }
+}
+
+void view_stats() {
+    FILE *f = fopen(LOG_FILE, "r");
+    if (!f) {
+        printf("No logs yet.\n");
+        return;
+    }
+    
+    int total = 0, urgent = 0, meeting = 0, normal = 0;
+    char line[MAX_MESSAGE];
+    
+    while (fgets(line, MAX_MESSAGE, f)) {
+        total++;
+        if (strstr(line, "Priority: URGENT")) urgent++;
+        else if (strstr(line, "Priority: MEETING")) meeting++;
+        else normal++;
+    }
+    fclose(f);
+    
+    printf("\n=== STATISTICS ===\n");
+    printf("Total messages: %d\n", total);
+    printf("Urgent: %d (%.1f%%)\n", urgent, total > 0 ? (float)urgent/total*100 : 0);
+    printf("Meeting: %d (%.1f%%)\n", meeting, total > 0 ? (float)meeting/total*100 : 0);
+    printf("Normal: %d (%.1f%%)\n", normal, total > 0 ? (float)normal/total*100 : 0);
+}
+
+int main() {
+    char message[MAX_MESSAGE];
+    char response[MAX_MESSAGE];
+    int choice;
+    
+    printf("=== MISSED CALL AUTO-RESPONDER ===\n");
+    printf("Version 2.0 - Enhanced Features\n");
+    
+    do {
+        printf("\n=== MENU ===\n");
+        printf("1. Incoming Message\n");
+        printf("2. View All Logs\n");
+        printf("3. Search Logs\n");
+        printf("4. View Statistics\n");
+        printf("5. Clear Logs\n");
+        printf("6. Exit\n");
+        printf("Choice: ");
+        
+        if (scanf("%d", &choice) != 1) {
+            printf("Invalid input. Please enter a number.\n");
+            while (getchar() != '\n');
+            continue;
+        }
+        getchar();
+        
+        switch(choice) {
+            case 1:
+                printf("Enter message: ");
+                fgets(message, MAX_MESSAGE, stdin);
+                message[strcspn(message, "\n")] = 0;
+                
+                if (strlen(message) == 0) {
+                    printf("Empty message. Please enter a valid message.\n");
+                    break;
+                }
+                
 
