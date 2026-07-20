@@ -214,4 +214,35 @@ int main() {
                     break;
                 }
                 
-
+                respond(message, response);
+                log_message(message, response);
+                printf("Message logged successfully.\n");
+                break;
+                
+            case 2:
+                view_logs();
+                break;
+                
+            case 3:
+                search_logs();
+                break;
+                
+            case 4:
+                view_stats();
+                break;
+                
+            case 5:
+                clear_logs();
+                break;
+                
+            case 6:
+                printf("Thank you for using the Auto-Responder. Goodbye!\n");
+                break;
+                
+            default:
+                printf("Invalid choice. Please select 1-6.\n");
+        }
+    } while(choice != 6);
+    
+    return 0;
+}
